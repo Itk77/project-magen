@@ -1,0 +1,30 @@
+# Debian / Raspberry Pi OS (apt) system packages used by this project.
+# Install with:
+#   sudo apt update
+#   awk 'NF && $1 !~ /^#/' system-packages.txt | xargs -r sudo apt install -y
+
+# Core / network
+ca-certificates     # Trusted CA bundle for HTTPS/TLS API calls.
+curl                # CLI HTTP client for health checks and quick API tests.
+openssl             # TLS cert/key generation used by MQTT setup script.
+
+# MQTT broker + testing
+mosquitto           # Local MQTT broker service.
+mosquitto-clients   # MQTT CLI tools (`mosquitto_pub`, `mosquitto_sub`) for testing.
+
+# Audio I/O
+alsa-utils          # ALSA tools (`arecord`, `aplay`) for audio device checks.
+libasound2          # ALSA runtime library used by Python audio stack.
+libasound2-dev      # ALSA headers/dev files for native audio Python wheels/builds.
+libportaudio2       # PortAudio runtime required by `sounddevice`.
+portaudio19-dev     # PortAudio headers/dev files for audio Python dependencies.
+
+# TTS / media conversion
+ffmpeg              # Audio conversion (e.g., MP3 to WAV fallback for playback).
+
+# Vision / CV runtime
+libatlas-base-dev   # Optimized BLAS runtime for NumPy/OpenCV on Raspberry Pi.
+libgl1              # OpenGL runtime required by OpenCV binary packages.
+libglib2.0-0        # GLib runtime used by OpenCV/video backends.
+libgomp1            # OpenMP runtime used by NumPy/OpenCV/ML dependencies.
+v4l-utils           # Camera diagnostics (`v4l2-ctl`) for webcam/device debugging.

@@ -1,0 +1,15 @@
+ignore/
+AGENTS.md
+.venv/
+.git/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+uv.lock
+runs/
+logs/
+models/tts/
+yolo-tests/
+calibration_image_sample_data_20x128x128x3_float32.npy
+yolo-speed-test/

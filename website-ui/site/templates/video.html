@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Video Stream</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="/static/css/design.css?v=20260526a">
+</head>
+<body class="video_page">
+    <div class="navbar">
+        <a href="/Home_page.html">Home</a>
+        <a href="/log.html">Log</a>
+        <a href="/chat.html">Chat</a>
+        <a href="/video.html">Video</a>
+        <a href="/sensors.html">Sensors</a>
+        <a href="/about_us.html">About Us</a>
+    </div>
+
+    <div class="video-container">
+        <h2>Live Camera Feed</h2>
+        <div id="video-wrapper">
+            <img id="videoStream" src="" alt="Camera Offline">
+        </div>
+        <div class="video-controls">
+            <button id="startBtn">Start Stream</button>
+            <button id="stopBtn">Stop Stream</button>
+            <button id="audioBtn">Activate Audio</button>
+            <button id="intercomBtn">Hold Intercom</button>
+        </div>
+        <div id="audioStatus" class="audio-status">Audio inactive</div>
+        <div id="intercomStatus" class="audio-status">Intercom inactive</div>
+    </div>
+
+    <script src="/static/js/alarm_notifications.js?v=20260527a"></script>
+    <script src="/static/js/video.js?v=20260526a"></script>
+</body>
+</html>

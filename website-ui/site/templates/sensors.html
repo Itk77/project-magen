@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sensors</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="/static/css/design.css?v=20260525a">
+</head>
+<body class="sensors_page">
+    <div class="navbar">
+        <a href="/Home_page.html">Home</a>
+        <a href="/log.html">Log</a>
+        <a href="/chat.html">Chat</a>
+        <a href="/video.html">Video</a>
+        <a href="/sensors.html">Sensors</a>
+        <a href="/about_us.html">About Us</a>
+    </div>
+
+    <main class="sensors-container">
+        <h2>Sensors</h2>
+        <div class="sensors-summary">
+            <div>Alarm: <strong id="alarmState">unknown</strong></div>
+            <div>Lock: <strong id="lockState">unknown</strong></div>
+            <div>ESP: <strong id="espConnection">unknown</strong></div>
+            <div>Main/MQTT: <strong id="mainConnection">unknown</strong></div>
+            <div>Last trigger: <strong id="lastTrigger">none</strong></div>
+            <div>Updated: <strong id="updatedAt">never</strong></div>
+        </div>
+
+        <h3 class="sensor-group-title">ESP unit</h3>
+        <div class="sensor-grid">
+            <section class="sensor-card" data-sensor="PIR">
+                <h3>PIR</h3>
+                <div class="sensor-detail" id="pirDetail">Loading...</div>
+                <button class="sensor-toggle" data-sensor="PIR">Toggle</button>
+            </section>
+            <section class="sensor-card" data-sensor="LDR">
+                <h3>LDR</h3>
+                <div class="sensor-detail" id="ldrDetail">Loading...</div>
+                <button class="sensor-toggle" data-sensor="LDR">Toggle</button>
+            </section>
+            <section class="sensor-card" data-sensor="REED">
+                <h3>REED</h3>
+                <div class="sensor-detail" id="reedDetail">Loading...</div>
+                <button class="sensor-toggle" data-sensor="REED">Toggle</button>
+            </section>
+        </div>
+
+        <h3 class="sensor-group-title sensor-group-title--pi">Pi unit</h3>
+        <div class="sensor-grid sensor-grid--pi">
+            <section class="sensor-card sensor-card--pi" data-sensor="VISUAL">
+                <h3>Camera / visual detection</h3>
+                <div class="sensor-detail" id="visualDetail">Loading...</div>
+                <button class="sensor-toggle" data-sensor="VISUAL">Toggle</button>
+            </section>
+        </div>
+
+        <div class="sensors-actions">
+            <button id="refreshSensorsBtn">Refresh Now</button>
+            <button id="requestEspStatusBtn">Request ESP Status</button>
+        </div>
+        <div id="sensorsMessage" class="sensors-message"></div>
+    </main>
+
+    <script src="/static/js/alarm_notifications.js?v=20260527a"></script>
+    <script src="/static/js/sensors.js?v=20260525a"></script>
+</body>
+</html>
