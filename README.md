@@ -89,5 +89,3 @@ The ESP32 keeps working if the Raspberry Pi or MQTT broker is unavailable.
 The firmware stores a SHA-256 hash, not the plaintext password. The entered code is hashed with `mbedtls_sha256()` and compared locally.
 
 When MQTT is connected, the ESP publishes the hash to the Pi on `alarm/auth/request`; it does not send the plaintext code. The local hash check still decides immediately, so the ESP can disarm even if the Pi or MQTT broker is unavailable.
-
-Hashing is safer than sending plaintext, especially because MQTT messages may be logged, but a plain SHA-256 hash of a short 4 digit code is still easy to brute-force if captured. MQTT TLS protects the message in transit, and a stronger future approach would be a challenge-response flow such as `HMAC(secret, nonce)` to avoid replaying a captured hash.
