@@ -2,6 +2,23 @@
 
 The main server is the Raspberry Pi control center for the Magen system. It serves the website, exposes the HTTP/WebSocket API, talks to the ESP over MQTT, starts the local Pi services, and gives the chat/voice LLM access to system tools.
 
+## Table of Contents
+
+- [What It Runs](#what-it-runs)
+- [Important Files](#important-files)
+- [Service Flow](#service-flow)
+- [Flowchart](#flowchart)
+- [Managed Services](#managed-services)
+- [Quick Start](#quick-start)
+- [Common Commands](#common-commands)
+- [Website](#website)
+- [Key API Endpoints](#key-api-endpoints)
+- [MQTT](#mqtt)
+- [Voice Loop](#voice-loop)
+- [Important Environment Variables](#important-environment-variables)
+- [State And Logs](#state-and-logs)
+- [Notes](#notes)
+
 ## What It Runs
 
 - Website pages from `website-ui/site`
@@ -42,6 +59,48 @@ On startup, `run_main_server.py` calls `check_config.py`. If config is valid, it
 5. Keeps logs, chat history, alarm state, and sensor state in `logs/`.
 
 The ESP communicates with the Pi mostly through MQTT. The website and LLM talk to the main server through local API calls and in-process tool calls.
+
+## Flowchart
+
+```mermaid
+flowchart TD
+    start["run_main_server.py"] --> check["check_config.py"]
+    check --> config["config.py"]
+    config --> main["MainServerService"]
+
+    main --> web["Website + REST API + WebSockets"]
+    main --> mqtt["MQTT client"]
+    main --> services["Managed subprocesses"]
+    main --> loops["Background loops"]
+    main --> state["logs/ state and history"]
+
+    web --> pages["website-ui/site pages"]
+    web --> api["/api/* endpoints"]
+    web --> video["/video_feed proxy"]
+    web --> audio_ws["/audio_ws intercom"]
+    web --> chat["Chat UI"]
+
+    mqtt <--> esp["ESP32 sensor unit"]
+    mqtt --> alarm_state["Alarm, lock, sensor, heartbeat updates"]
+    api --> alarm_state
+    chat --> llm["Gemini LLM service"]
+    loops --> voice["GPIO 23 voice button loop"]
+    voice --> audio_io["Audio IO service"]
+    voice --> llm
+    llm --> tools["system_tools.py"]
+    tools --> api
+    llm --> tts["Edge TTS service"]
+    tts --> audio_io
+
+    services --> audio_io
+    services --> tts
+    services --> visual["Visual processing service"]
+    services --> camera["Camera service, stream mode only"]
+    visual --> yolo["YOLO/OpenVINO model"]
+    visual --> visual_alarm["Person detection alarm trigger"]
+    visual_alarm --> api
+    camera --> visual
+```
 
 ## Managed Services
 
