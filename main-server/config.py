@@ -103,61 +103,32 @@ AUDIO_IO_SERVICE_CONFIG = {
     "max_segments": int(os.environ.get("AUDIO_IO_MAX_SEGMENTS", "50")),
 }
 
-_tts_provider = os.environ.get("TTS_PROVIDER", "edge").strip().lower()
-_tts_providers = {
-    "edge": f"{PROJECT_ROOT / 'main-server' / 'tts' / 'edge_tts_service.py'}:EdgeTTSService",
-    "kokoro": f"{PROJECT_ROOT / 'main-server' / 'tts' / 'kokoro_tts_service.py'}:KokoroTTSService",
+# Replace this path to swap TTS implementation.
+TTS_SERVICE_CLASS = os.environ.get(
+    "TTS_SERVICE_CLASS",
+    f"{PROJECT_ROOT / 'main-server' / 'tts' / 'edge_tts_service.py'}:EdgeTTSService",
+)
+
+TTS_SERVICE_CONFIG = {
+    "host": os.environ.get("TTS_HOST", "0.0.0.0"),
+    "port": int(os.environ.get("TTS_PORT", "8093")),
+    "service_id": os.environ.get("TTS_SERVICE_ID", "tts-main"),
+    "default_voice": os.environ.get("TTS_DEFAULT_VOICE", "en-US-AriaNeural"),
+    "default_rate": os.environ.get("TTS_DEFAULT_RATE", "+0%"),
+    "default_pitch": os.environ.get("TTS_DEFAULT_PITCH", "+0Hz"),
+    "default_volume": os.environ.get("TTS_DEFAULT_VOLUME", "+0%"),
+    "output_format": os.environ.get("TTS_OUTPUT_FORMAT", "audio-24khz-48kbitrate-mono-mp3"),
+    "output_dir": os.environ.get("TTS_OUTPUT_DIR", "/tmp/magen-tts"),
+    "keep_files": _env_bool("TTS_KEEP_FILES", False),
+    "max_history": int(os.environ.get("TTS_MAX_HISTORY", "100")),
+    "audio_io_play_url": os.environ.get(
+        "TTS_AUDIO_IO_PLAY_URL",
+        "http://127.0.0.1:8092/speaker/play-wav",
+    ),
+    "request_timeout_sec": float(os.environ.get("TTS_REQUEST_TIMEOUT_SEC", "30")),
+    "synthesis_retries": int(os.environ.get("TTS_SYNTHESIS_RETRIES", "3")),
+    "retry_backoff_sec": float(os.environ.get("TTS_RETRY_BACKOFF_SEC", "0.8")),
 }
-
-# Replace this path (or set TTS_SERVICE_CLASS env) to swap TTS implementation.
-TTS_SERVICE_CLASS = os.environ.get("TTS_SERVICE_CLASS", _tts_providers.get(_tts_provider, _tts_providers["edge"]))
-
-if "kokoro_tts_service.py" in TTS_SERVICE_CLASS:
-    TTS_SERVICE_CONFIG = {
-        "host": os.environ.get("TTS_HOST", "0.0.0.0"),
-        "port": int(os.environ.get("TTS_PORT", "8093")),
-        "service_id": os.environ.get("TTS_SERVICE_ID", "tts-main"),
-        "model_path": os.environ.get(
-            "TTS_KOKORO_MODEL_PATH",
-            str(PROJECT_ROOT / "models" / "tts" / "kokoro-v1.0.onnx"),
-        ),
-        "voices_path": os.environ.get(
-            "TTS_KOKORO_VOICES_PATH",
-            str(PROJECT_ROOT / "models" / "tts" / "voices-v1.0.bin"),
-        ),
-        "default_voice": os.environ.get("TTS_DEFAULT_VOICE", "af_sarah"),
-        "default_lang": os.environ.get("TTS_KOKORO_DEFAULT_LANG", "en-us"),
-        "default_speed": float(os.environ.get("TTS_KOKORO_DEFAULT_SPEED", "1.0")),
-        "output_dir": os.environ.get("TTS_OUTPUT_DIR", "/tmp/magen-tts"),
-        "keep_files": _env_bool("TTS_KEEP_FILES", False),
-        "max_history": int(os.environ.get("TTS_MAX_HISTORY", "100")),
-        "audio_io_play_url": os.environ.get(
-            "TTS_AUDIO_IO_PLAY_URL",
-            "http://127.0.0.1:8092/speaker/play-wav",
-        ),
-        "request_timeout_sec": float(os.environ.get("TTS_REQUEST_TIMEOUT_SEC", "30")),
-    }
-else:
-    TTS_SERVICE_CONFIG = {
-        "host": os.environ.get("TTS_HOST", "0.0.0.0"),
-        "port": int(os.environ.get("TTS_PORT", "8093")),
-        "service_id": os.environ.get("TTS_SERVICE_ID", "tts-main"),
-        "default_voice": os.environ.get("TTS_DEFAULT_VOICE", "en-US-AriaNeural"),
-        "default_rate": os.environ.get("TTS_DEFAULT_RATE", "+0%"),
-        "default_pitch": os.environ.get("TTS_DEFAULT_PITCH", "+0Hz"),
-        "default_volume": os.environ.get("TTS_DEFAULT_VOLUME", "+0%"),
-        "output_format": os.environ.get("TTS_OUTPUT_FORMAT", "audio-24khz-48kbitrate-mono-mp3"),
-        "output_dir": os.environ.get("TTS_OUTPUT_DIR", "/tmp/magen-tts"),
-        "keep_files": _env_bool("TTS_KEEP_FILES", False),
-        "max_history": int(os.environ.get("TTS_MAX_HISTORY", "100")),
-        "audio_io_play_url": os.environ.get(
-            "TTS_AUDIO_IO_PLAY_URL",
-            "http://127.0.0.1:8092/speaker/play-wav",
-        ),
-        "request_timeout_sec": float(os.environ.get("TTS_REQUEST_TIMEOUT_SEC", "30")),
-        "synthesis_retries": int(os.environ.get("TTS_SYNTHESIS_RETRIES", "3")),
-        "retry_backoff_sec": float(os.environ.get("TTS_RETRY_BACKOFF_SEC", "0.8")),
-    }
 
 # Replace this path to swap LLM implementation.
 LLM_SERVICE_CLASS = os.environ.get(

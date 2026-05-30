@@ -1,12 +1,10 @@
 ignore/
-AGENTS.md
 .venv/
 .git/
 __pycache__/
 *.pyc
 node_modules/
 dist/
-uv.lock
 runs/
 logs/
 models/tts/

@@ -24,9 +24,6 @@ audio-io = [
 tts-edge = [
     "edge-tts>=6.1,<8",
 ]
-tts-kokoro = [
-    "kokoro-onnx>=0.4,<1",
-]
 llm-gemini = [
     "google-genai>=0.8,<1",
 ]
@@ -39,7 +36,6 @@ main-server = [
     "sounddevice>=0.4.6,<1",
     "websockets>=12,<15",
     "edge-tts>=6.1,<8",
-    "kokoro-onnx>=0.4,<1",
     "google-genai>=0.8,<1",
 ]
 
