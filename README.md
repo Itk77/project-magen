@@ -2,6 +2,18 @@
 
 This firmware runs the sensor/keypad unit for the Magen alarm system.
 
+## Table of Contents
+
+- [Hardware Roles](#hardware-roles)
+- [Keypad Controls](#keypad-controls)
+- [Alarm States](#alarm-states)
+- [OLED Status Indicators](#oled-status-indicators)
+- [MQTT Discovery](#mqtt-discovery)
+- [Time and TLS](#time-and-tls)
+- [MQTT Topics](#mqtt-topics)
+- [Offline Behavior](#offline-behavior)
+- [Password Hash](#password-hash)
+
 ## Hardware Roles
 
 - Keypad: enters the alarm password and local commands.
