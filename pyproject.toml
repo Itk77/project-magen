@@ -2,7 +2,7 @@
 name = "magen"
 version = "0.1.0"
 description = "project magen"
-readme = "main-server/README.md"
+readme = "README.md"
 requires-python = "==3.11.*"
 dependencies = []
 
