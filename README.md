@@ -64,42 +64,91 @@ The ESP communicates with the Pi mostly through MQTT. The website and LLM talk t
 
 ```mermaid
 flowchart TD
-    start["run_main_server.py"] --> check["check_config.py"]
-    check --> config["config.py"]
-    config --> main["MainServerService"]
+    %% Startup flow
+    run["run_main_server.py"]
+    validate["check_config.py<br/>validate config"]
+    build["Build MainServerService<br/>from config.py"]
+    start["_async_start()"]
 
-    main --> web["Website + REST API + WebSockets"]
-    main --> mqtt["MQTT client"]
-    main --> services["Managed subprocesses"]
-    main --> loops["Background loops"]
-    main --> state["logs/ state and history"]
+    run --> validate
+    validate -->|OK| build
+    build --> start
 
-    web --> pages["website-ui/site pages"]
-    web --> api["/api/* endpoints"]
-    web --> video["/video_feed proxy"]
-    web --> audio_ws["/audio_ws intercom"]
-    web --> chat["Chat UI"]
+    %% Startup services
+    subgraph startupServices["Startup services"]
+        direction TB
+        managed["Start managed services<br/>audio_io, tts, visual"]
+        web["Build aiohttp app<br/>website + /api + /ws"]
+        mqtt["Start MQTT client<br/>subscribe + publish"]
+        loops["Background loops<br/>heartbeat, visual alarm, voice button"]
+    end
 
-    mqtt <--> esp["ESP32 sensor unit"]
-    mqtt --> alarm_state["Alarm, lock, sensor, heartbeat updates"]
-    api --> alarm_state
-    chat --> llm["Gemini LLM service"]
-    loops --> voice["GPIO 23 voice button loop"]
-    voice --> audio_io["Audio IO service"]
-    voice --> llm
-    llm --> tools["system_tools.py"]
-    tools --> api
-    llm --> tts["Edge TTS service"]
-    tts --> audio_io
+    start --> managed
+    start --> web
+    start --> mqtt
+    start --> loops
 
-    services --> audio_io
-    services --> tts
-    services --> visual["Visual processing service"]
-    services --> camera["Camera service, stream mode only"]
-    visual --> yolo["YOLO/OpenVINO model"]
-    visual --> visual_alarm["Person detection alarm trigger"]
-    visual_alarm --> api
-    camera --> visual
+    %% Website layer
+    subgraph websiteLayer["Website / API layer"]
+        direction TB
+        website["Website client<br/>Home / Chat / Video / Sensors"]
+        api["HTTP API handlers<br/>arm, disarm, sensors, logs"]
+        ws["WebSocket handlers<br/>chat, logs, audio bridge"]
+        video["Video proxy<br/>shared snapshot hub"]
+    end
+
+    web -->|serves pages| website
+    website -->|fetch /api| api
+    website -->|connect /ws| ws
+    website -->|GET /video_feed| video
+
+    %% AI and local services
+    subgraph aiServices["AI / Local services"]
+        direction TB
+        llm["In-process LLM<br/>GeminiAudioLLMService"]
+        tools["System tools<br/>status, arm, disarm, sensors"]
+        audio["audio-io service<br/>mic record + speakers"]
+        visual["visual-processing service<br/>Pi camera + YOLO"]
+    end
+
+    api -->|chat/status/actions| llm
+    ws -->|chat messages| llm
+    llm -->|tool calls| tools
+    tools -->|state commands| mqtt
+
+    loops -->|button voice loop| audio
+    audio -->|recorded WAV| llm
+    llm -->|TTS playback| audio
+
+    loops -->|poll detections| visual
+    video -->|snapshot/stream| visual
+    visual -->|alarm trigger| mqtt
+
+    %% External device and shutdown
+    subgraph external["External / shutdown"]
+        direction TB
+        esp["ESP over MQTT<br/>state, sensors, lock, heartbeat"]
+        shutdown["_async_shutdown()<br/>stop loops, MQTT, services"]
+    end
+
+    mqtt -->|commands/state| esp
+    esp -->|sensor/status| mqtt
+    start -->|on stop| shutdown
+
+    %% Styling
+    classDef startup fill:#e0f2fe,stroke:#334155,stroke-width:2px;
+    classDef active fill:#dcfce7,stroke:#334155,stroke-width:2px;
+    classDef services fill:#fef9c3,stroke:#334155,stroke-width:2px;
+    classDef webLayer fill:#fae8ff,stroke:#334155,stroke-width:2px;
+    classDef aiLayer fill:#ede9fe,stroke:#334155,stroke-width:2px;
+    classDef externalLayer fill:#fee2e2,stroke:#334155,stroke-width:2px;
+
+    class run,validate,build startup;
+    class start active;
+    class managed,web,mqtt,loops services;
+    class website,api,ws,video webLayer;
+    class llm,tools,audio,visual aiLayer;
+    class esp,shutdown externalLayer;
 ```
 
 ## Managed Services
