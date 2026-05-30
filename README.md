@@ -25,7 +25,7 @@ The main server is the Raspberry Pi control center for the Magen system. It serv
 - `main-server/check_config.py` validates service classes, required model files, URLs, ports, MQTT TLS files, and website paths.
 - `main-server/llm/gemini_audio_llm_service.py` handles chat and voice LLM calls.
 - `main-server/llm/system_tools.py` defines the tools the LLM can use.
-- `main-server/tts/` contains TTS providers.
+- `main-server/tts/edge_tts_service.py` contains the Edge TTS service.
 - `systemd/magen-main-server.service` is the boot service unit.
 - `install_main_server_service.sh` installs and starts the systemd service.
 
@@ -64,6 +64,34 @@ VISUAL_CAMERA_MODE=direct
 ```
 
 the visual processing service opens the Pi camera directly, and the separate camera service is not started.
+
+## Quick Start
+
+Install Python dependencies with `uv`:
+
+```bash
+uv sync --group main-server
+```
+
+Run a config check:
+
+```bash
+uv run python main-server/check_config.py
+```
+
+Start the main server locally:
+
+```bash
+uv run python main-server/run_main_server.py
+```
+
+Then open:
+
+```text
+http://localhost:8080/
+```
+
+For the full Pi setup, make sure Mosquitto/TLS, camera access, audio devices, and `GEMINI_API_KEY` or `LLM_API_KEY` are configured before relying on MQTT, visual processing, audio, or LLM features.
 
 ## Common Commands
 
@@ -112,7 +140,13 @@ Main pages:
 ## Key API Endpoints
 
 - `GET /health` or `/api/health`: main server health
+- `GET /api/logs`: recent server logs
+- `GET /api/history`: recent system history
+- `GET /api/chat/history`: chat history
+- `POST /api/chat/send`: send a chat message to the LLM
 - `GET /api/system/status`: alarm, lock, sensor, MQTT, and connectivity state
+- `GET /api/system/info`: static system info for the website
+- `GET /api/system/history`: alarm/control history
 - `POST /api/system/arm`: arm system, requires password
 - `POST /api/system/disarm`: disarm system, requires password
 - `POST /api/system/alarm`: activate alarm
@@ -120,6 +154,7 @@ Main pages:
 - `POST /api/sensors/update`: enable or disable a sensor, requires password
 - `GET /api/services/health`: managed service health
 - `GET /api/mqtt/status`: MQTT connection and recent MQTT state
+- `GET /api/camera/snapshot.jpg`: proxied camera snapshot
 - `GET /video_feed`: proxied video feed
 
 ## MQTT

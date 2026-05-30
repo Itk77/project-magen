@@ -6,9 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=user1
-WorkingDirectory=/home/user1/magen-pi
-Environment=PATH=/home/user1/magen-pi/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/home/user1/magen-pi/.venv/bin/python /home/user1/magen-pi/main-server/run_main_server.py
+WorkingDirectory=/home/user1/project-magen
+Environment=PATH=/home/user1/project-magen/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/user1/project-magen/.venv/bin/python /home/user1/project-magen/main-server/run_main_server.py
 Restart=always
 RestartSec=5
 
