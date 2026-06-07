@@ -476,27 +476,6 @@ class GeminiAudioLLMService:
         )
 
     @staticmethod
-    def _redact_sensitive_output(text: str) -> str:
-        return re.sub(r"(?i)(password\s*(?:is|=|:)?\s*)(\S+)", r"\1***", text)
-
-    @staticmethod
-    def _extract_password_tokens(text: str) -> tuple[str, dict[str, str]]:
-        token_map: dict[str, str] = {}
-        idx = 0
-
-        pattern = re.compile(r"(?i)(\bpassword\b\s*(?:is|=|:)?\s*)([^\s,.;]+)")
-
-        def repl(match: re.Match[str]) -> str:
-            nonlocal idx
-            idx += 1
-            token = f"PWD_TOKEN_{idx}"
-            token_map[token] = match.group(2)
-            return f"{match.group(1)}{token}"
-
-        sanitized = pattern.sub(repl, text)
-        return sanitized, token_map
-
-    @staticmethod
     def _extract_first_json_object(text: str) -> str | None:
         s = text.strip()
         if s.startswith("```"):
@@ -785,13 +764,14 @@ class GeminiAudioLLMService:
         original_request: str,
         plan_assistant_response: str,
         tool_results: list[dict[str, Any]],
+        redaction_values: list[str],
     ) -> str:
         if not tool_results:
             text = plan_assistant_response.strip()
             if '"assistant_response"' in text:
                 text = self._safe_assistant_text(text)
             if text:
-                return self._redact_sensitive_output(text)
+                return self._redact_values(text, redaction_values)
             return "I processed your request."
 
         summary_payload = {
@@ -821,7 +801,7 @@ class GeminiAudioLLMService:
             )
             text = str(getattr(response, "text", "")).strip()
             if text:
-                return self._redact_sensitive_output(text)
+                return self._redact_values(text, redaction_values)
         except Exception:  # noqa: BLE001
             pass
 
@@ -832,7 +812,7 @@ class GeminiAudioLLMService:
             if msg:
                 messages.append(msg)
         if messages:
-            return self._redact_sensitive_output(" ".join(messages))
+            return self._redact_values(" ".join(messages), redaction_values)
         return "Done."
 
     def _assistant_core(
@@ -899,6 +879,7 @@ class GeminiAudioLLMService:
             original_request=original_request_for_history,
             plan_assistant_response=str(plan.get("assistant_response", "")),
             tool_results=tool_results,
+            redaction_values=password_redactions,
         )
 
         result = {
@@ -943,20 +924,15 @@ class GeminiAudioLLMService:
         if not raw:
             raise ValueError("text is required")
 
-        sanitized, token_map = self._extract_password_tokens(raw)
-        input_parts = [self._part_text(f"User text request:\n{sanitized}")]
+        input_parts = [self._part_text(f"User text request:\n{raw}")]
 
-        result = self._assistant_core(
+        return self._assistant_core(
             input_parts=input_parts,
             channel=channel,
             source=source,
-            password_tokens=token_map,
-            original_request_for_history=sanitized,
+            password_tokens={},
+            original_request_for_history=raw,
         )
-        if "redacted_user_text" in result:
-            for token, value in token_map.items():
-                result["redacted_user_text"] = str(result["redacted_user_text"]).replace(token, "***")
-        return result
 
     def assistant_audio_turn(
         self,
