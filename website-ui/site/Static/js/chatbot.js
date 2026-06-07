@@ -6,10 +6,7 @@ const sendButton = document.getElementById("send-btn");
 
 let history_loaded = false;
 let wait_response = false;
-
-function redactSensitiveText(text) {
-    return String(text || "").replace(/(\bpassword\b\s*(?:is|=|:)?\s*)([^\s,.;]+)/gi, "$1***");
-}
+let pendingUserMessage = null;
 
 socket.onopen = () => {
     console.log("Connected to the Raspberry Pi!");
@@ -40,7 +37,12 @@ socket.onmessage = (event) => {
         if (typing) typing.remove();
 
         // Add the AI response
+        if (pendingUserMessage && typeof data.user_text === "string") {
+            const textEl = pendingUserMessage.querySelector(".message-text");
+            if (textEl) textEl.textContent = data.user_text;
+        }
         appendMessage("Bot", data.text);
+        pendingUserMessage = null;
         
         // Unlock the UI
         wait_response = false;
@@ -61,12 +63,13 @@ function appendMessage(sender, text) {
     const textEl = document.createElement("span");
     textEl.className = "message-text";
     textEl.dir = "auto";
-    textEl.textContent = redactSensitiveText(text);
+    textEl.textContent = String(text || "");
 
     msgDiv.appendChild(senderEl);
     msgDiv.appendChild(textEl);
     chatBox.appendChild(msgDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
+    return msgDiv;
 }
 
 function handleMessage() {
@@ -79,7 +82,7 @@ function handleMessage() {
     socket.send(JSON.stringify({ type: "chat_message", text: text }));
 
     // Show your message and a loading indicator
-    appendMessage("You", text);
+    pendingUserMessage = appendMessage("You", text);
     const typing = document.createElement("i");
     typing.id = "typing";
     typing.textContent = "Bot is thinking...";

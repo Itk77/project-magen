@@ -729,6 +729,49 @@ class GeminiAudioLLMService:
 
         return sanitized_calls, results
 
+    @staticmethod
+    def _successful_password_values(
+        *,
+        tool_calls: list[dict[str, Any]],
+        tool_results: list[dict[str, Any]],
+        password_tokens: dict[str, str],
+    ) -> list[str]:
+        values: list[str] = []
+        action_tools = SystemToolRuntime.ACTION_TOOL_NAMES
+        for call, item in zip(tool_calls, tool_results):
+            name = str(call.get("name", "")).strip()
+            if name not in action_tools:
+                continue
+            result = item.get("result") if isinstance(item, dict) else None
+            if not isinstance(result, dict) or not bool(result.get("ok")):
+                continue
+            args = call.get("arguments", {})
+            if not isinstance(args, dict):
+                continue
+
+            token = str(args.get("password_token", "")).strip()
+            if token and token in password_tokens:
+                values.append(str(password_tokens[token]))
+                continue
+
+            for key in ("password", "password_hash"):
+                value = str(args.get(key, "")).strip()
+                if value:
+                    values.append(value)
+
+        deduped: list[str] = []
+        for value in values:
+            if value and value not in deduped:
+                deduped.append(value)
+        return deduped
+
+    @staticmethod
+    def _redact_values(text: str, values: list[str]) -> str:
+        redacted = text
+        for value in values:
+            redacted = redacted.replace(value, "***")
+        return redacted
+
     def _compose_final_response(
         self,
         *,
@@ -839,6 +882,11 @@ class GeminiAudioLLMService:
             ctx=ctx,
             password_tokens=password_tokens,
         )
+        password_redactions = self._successful_password_values(
+            tool_calls=tool_calls,
+            tool_results=tool_results,
+            password_tokens=password_tokens,
+        )
 
         final_text = self._compose_final_response(
             model=model,
@@ -858,6 +906,8 @@ class GeminiAudioLLMService:
             "tool_calls": sanitized_calls,
             "tool_results": tool_results,
         }
+        if password_redactions and original_request_for_history:
+            result["redacted_user_text"] = self._redact_values(original_request_for_history, password_redactions)
 
         self._append_history(
             {
@@ -871,6 +921,7 @@ class GeminiAudioLLMService:
                 "tool_calls": sanitized_calls,
                 "tool_results": tool_results,
                 "assistant_text": final_text,
+                "redacted_user_text": result.get("redacted_user_text", original_request_for_history),
             }
         )
 
@@ -891,13 +942,17 @@ class GeminiAudioLLMService:
         sanitized, token_map = self._extract_password_tokens(raw)
         input_parts = [self._part_text(f"User text request:\n{sanitized}")]
 
-        return self._assistant_core(
+        result = self._assistant_core(
             input_parts=input_parts,
             channel=channel,
             source=source,
             password_tokens=token_map,
             original_request_for_history=sanitized,
         )
+        if "redacted_user_text" in result:
+            for token, value in token_map.items():
+                result["redacted_user_text"] = str(result["redacted_user_text"]).replace(token, "***")
+        return result
 
     def assistant_audio_turn(
         self,

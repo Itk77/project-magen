@@ -23,7 +23,6 @@ import json
 import logging
 import mimetypes
 import os
-import re
 import subprocess
 import threading
 import sys
@@ -537,14 +536,10 @@ class MainServerService:
         self._append_jsonl(self.history_jsonl_path, evt)
         return evt
 
-    @staticmethod
-    def _redact_sensitive_text(text: str) -> str:
-        return re.sub(r"(?i)(\bpassword\b\s*(?:is|=|:)?\s*)([^\s,.;]+)", r"\1***", str(text))
-
     def _append_chat_message(self, sender: str, text: str, *, source: str) -> dict[str, Any]:
         item = {
             "sender": sender,
-            "text": self._redact_sensitive_text(text),
+            "text": str(text),
             "source": source,
             "timestamp_unix": dt.datetime.now().timestamp(),
         }
@@ -1826,21 +1821,23 @@ class MainServerService:
         return browser_ws
 
     async def _handle_chat_turn(self, ws: web.WebSocketResponse, *, text: str) -> None:
-        self._append_chat_message("You", text, source="website_ws")
-        self._record_history("chat_user_message", source="website_ws", details={"text": text})
-        await self._publish_log(f"user chat: {text}", source="chat")
-
         try:
             result = await self._assistant_text(text, source="website_ws_chat")
             mqtt_actions = await self._handle_assistant_tool_actions(result=result, source="assistant_ws")
             assistant_text = str(result.get("assistant_text", "")).strip() or "Done."
+            stored_user_text = str(result.get("redacted_user_text") or text)
         except Exception as exc:  # noqa: BLE001
             self._last_error = str(exc)
             assistant_text = "Failed to contact assistant service."
+            self._append_chat_message("You", text, source="website_ws")
+            self._record_history("chat_user_message", source="website_ws", details={"text": text})
             await self._publish_log(f"assistant error: {exc}", source="chat")
             await ws.send_json({"type": "reply", "text": assistant_text})
             return
 
+        self._append_chat_message("You", stored_user_text, source="website_ws")
+        self._record_history("chat_user_message", source="website_ws", details={"text": stored_user_text})
+        await self._publish_log("user chat message processed", source="chat")
         self._append_chat_message("Bot", assistant_text, source="website_ws")
         self._record_history(
             "chat_assistant_reply",
@@ -1852,7 +1849,8 @@ class MainServerService:
             },
         )
         await self._publish_log(f"assistant reply: {assistant_text}", source="chat")
-        await ws.send_json({"type": "reply", "text": assistant_text})
+        result.pop("redacted_user_text", None)
+        await ws.send_json({"type": "reply", "text": assistant_text, "user_text": stored_user_text})
 
     async def _tts_speak_text(self, text: str) -> dict[str, Any] | None:
         if not self.tts_speak_url or not text.strip():
@@ -2170,19 +2168,21 @@ class MainServerService:
         if not text:
             raise web.HTTPBadRequest(text="text must not be empty")
 
-        self._append_chat_message("You", text, source="website_api")
-        self._record_history("chat_user_message", source="website_api", details={"text": text})
-        await self._publish_log(f"user chat(api): {text}", source="chat")
-
         try:
             result = await self._assistant_text(text, source="website_api_chat")
             mqtt_actions = await self._handle_assistant_tool_actions(result=result, source="assistant_api")
+            stored_user_text = str(result.get("redacted_user_text") or text)
         except Exception as exc:  # noqa: BLE001
             self._last_error = str(exc)
+            self._append_chat_message("You", text, source="website_api")
+            self._record_history("chat_user_message", source="website_api", details={"text": text})
             await self._publish_log(f"assistant error(api): {exc}", source="chat")
             raise web.HTTPBadGateway(text=f"assistant call failed: {exc}") from exc
 
         assistant_text = str(result.get("assistant_text", "")).strip() or "Done."
+        self._append_chat_message("You", stored_user_text, source="website_api")
+        self._record_history("chat_user_message", source="website_api", details={"text": stored_user_text})
+        await self._publish_log("user chat(api) message processed", source="chat")
         self._append_chat_message("Bot", assistant_text, source="website_api")
         self._record_history(
             "chat_assistant_reply",
@@ -2194,6 +2194,7 @@ class MainServerService:
             },
         )
         await self._publish_log(f"assistant reply(api): {assistant_text}", source="chat")
+        result.pop("redacted_user_text", None)
         return web.json_response({"ok": True, "result": result})
 
     async def _handle_api_system_status(self, request: web.Request) -> web.Response:
