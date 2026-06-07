@@ -745,6 +745,10 @@ class GeminiAudioLLMService:
             result = item.get("result") if isinstance(item, dict) else None
             if not isinstance(result, dict) or not bool(result.get("ok")):
                 continue
+            redaction_value = str(result.pop("_password_redaction_value", "")).strip()
+            if redaction_value:
+                values.append(redaction_value)
+                continue
             args = call.get("arguments", {})
             if not isinstance(args, dict):
                 continue

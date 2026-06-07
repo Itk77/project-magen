@@ -430,6 +430,7 @@ class SystemToolRuntime:
                 "message": confirm_msg,
                 "armed": armed_now,
                 "tts": tts_result,
+                "_password_redaction_value": provided_password,
             }
 
         if tool_name == "set_sensor_enabled":
@@ -481,6 +482,7 @@ class SystemToolRuntime:
                 "message": message,
                 "sensor_action": {"sensor": sensor, "enabled": enabled},
                 "tts": tts_result,
+                "_password_redaction_value": provided_password,
             }
 
         self.record_event(
