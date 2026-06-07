@@ -243,7 +243,6 @@ Main pages:
 - `/chat.html`
 - `/video.html`
 - `/sensors.html`
-- `/about_us.html`
 
 ## Key API Endpoints
 

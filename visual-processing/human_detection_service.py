@@ -371,6 +371,7 @@ class HumanDetectionProcessingService:
         detections: list[Detection],
         motion_detected: bool,
         motion_ratio: float,
+        show_motion: bool,
     ) -> Any:
         frame_h, frame_w = frame.shape[:2]
         label_scale = 0.6
@@ -410,11 +411,9 @@ class HumanDetectionProcessingService:
                 cv2.LINE_AA,
             )
 
-        status_parts = [
-            f"{self.service_id}",
-            f"humans:{len(detections)}",
-            f"motion:{'yes' if motion_detected else 'no'} ({motion_ratio:.3f})",
-        ]
+        status_parts = [f"Humans: {len(detections)}"]
+        if show_motion:
+            status_parts.append(f"Motion: {'yes' if motion_detected else 'no'} ({motion_ratio:.3f})")
         lines: list[str] = []
         current = ""
         max_text_w = max(40, frame_w - (pad * 2))
@@ -512,6 +511,7 @@ class HumanDetectionProcessingService:
                 detections=detections,
                 motion_detected=motion_detected,
                 motion_ratio=motion_ratio,
+                show_motion=self.motion_gated_yolo,
             )
 
             enc_ok, encoded = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 82])

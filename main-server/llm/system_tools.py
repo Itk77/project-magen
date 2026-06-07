@@ -41,6 +41,7 @@ class SystemToolRuntime:
         tts_timeout_sec: float,
         service_health_urls: dict[str, str] | None = None,
         system_status_provider: Callable[[str, str], dict[str, Any]] | None = None,
+        system_history_provider: Callable[[str, float, int], dict[str, Any]] | None = None,
         history_size: int = 2000,
     ) -> None:
         if history_size <= 0:
@@ -58,6 +59,7 @@ class SystemToolRuntime:
 
         self._service_health_urls = dict(service_health_urls or {})
         self._system_status_provider = system_status_provider
+        self._system_history_provider = system_history_provider
 
         self._armed = False
         self._last_state_change_unix = time.time()
@@ -76,6 +78,9 @@ class SystemToolRuntime:
 
     def set_system_status_provider(self, provider: Callable[[str, str], dict[str, Any]] | None) -> None:
         self._system_status_provider = provider
+
+    def set_system_history_provider(self, provider: Callable[[str, float, int], dict[str, Any]] | None) -> None:
+        self._system_history_provider = provider
 
     @staticmethod
     def tool_schemas() -> list[dict[str, Any]]:
@@ -345,6 +350,14 @@ class SystemToolRuntime:
             limit = min(max(limit, 1), 500)
 
             events = self.query_history(hours=hours, limit=limit)
+            server_history: dict[str, Any] | None = None
+            if self._system_history_provider is not None:
+                try:
+                    provided = self._system_history_provider(ctx.channel, hours, limit)
+                    if isinstance(provided, dict):
+                        server_history = provided
+                except Exception as exc:  # noqa: BLE001
+                    server_history = {"ok": False, "error": str(exc)}
             result = {
                 "ok": True,
                 "message": f"Retrieved system history for the last {hours:.1f} hour(s).",
@@ -352,6 +365,10 @@ class SystemToolRuntime:
                 "count": len(events),
                 "events": events,
             }
+            if server_history is not None:
+                result["server_history"] = server_history
+                result["server_history_count"] = len(server_history.get("history", [])) if isinstance(server_history.get("history"), list) else 0
+                result["server_log_count"] = len(server_history.get("logs", [])) if isinstance(server_history.get("logs"), list) else 0
             self.record_event(
                 "tool_get_system_history",
                 ctx.channel,

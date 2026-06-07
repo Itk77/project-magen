@@ -104,6 +104,9 @@ class GeminiAudioLLMService:
     def set_system_status_provider(self, provider: Any) -> None:
         self._tool_runtime.set_system_status_provider(provider)
 
+    def set_system_history_provider(self, provider: Any) -> None:
+        self._tool_runtime.set_system_history_provider(provider)
+
     @staticmethod
     def _load_model_config(config_path: str) -> dict[str, Any]:
         path = Path(config_path)

@@ -23,6 +23,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import subprocess
 import threading
 import sys
@@ -58,7 +59,6 @@ class MainServerService:
         "chat.html",
         "video.html",
         "sensors.html",
-        "about_us.html",
     }
 
     def _configure_logging(self) -> None:
@@ -313,6 +313,8 @@ class MainServerService:
         self._llm_service = build_service(self.llm_service_class, self.llm_service_config)
         if hasattr(self._llm_service, "set_system_status_provider"):
             self._llm_service.set_system_status_provider(self._llm_system_status_snapshot)
+        if hasattr(self._llm_service, "set_system_history_provider"):
+            self._llm_service.set_system_history_provider(self._llm_system_history_snapshot)
 
     def _init_alarm_gpio(self) -> None:
         if GPIO is None:
@@ -535,10 +537,14 @@ class MainServerService:
         self._append_jsonl(self.history_jsonl_path, evt)
         return evt
 
+    @staticmethod
+    def _redact_sensitive_text(text: str) -> str:
+        return re.sub(r"(?i)(\bpassword\b\s*(?:is|=|:)?\s*)([^\s,.;]+)", r"\1***", str(text))
+
     def _append_chat_message(self, sender: str, text: str, *, source: str) -> dict[str, Any]:
         item = {
             "sender": sender,
-            "text": text,
+            "text": self._redact_sensitive_text(text),
             "source": source,
             "timestamp_unix": dt.datetime.now().timestamp(),
         }
@@ -703,6 +709,36 @@ class MainServerService:
             "last_error": status.get("last_error"),
         }
         return sensor_state
+
+    def _llm_system_history_snapshot(self, _channel: str, hours: float, limit: int) -> dict[str, Any]:
+        now = dt.datetime.now().timestamp()
+        since = now - (max(0.0, float(hours)) * 3600.0)
+        safe_limit = max(1, int(limit))
+        with self._mqtt_lock:
+            sensor_state = json.loads(json.dumps(self._mqtt_sensor_state, default=str))
+        history = [
+            dict(item)
+            for item in self._history
+            if float(item.get("timestamp_unix", item.get("timestamp", 0.0)) or 0.0) >= since
+        ]
+        logs = [
+            dict(item)
+            for item in self._logs
+            if float(item.get("timestamp_unix", item.get("timestamp", 0.0)) or 0.0) >= since
+        ]
+        return {
+            "ok": True,
+            "hours": hours,
+            "limit": safe_limit,
+            "history": history[-safe_limit:],
+            "logs": logs[-safe_limit:],
+            "current_status": {
+                "desired_alarm_state": sensor_state.get("desired_alarm_state"),
+                "alarm_state": sensor_state.get("alarm_state"),
+                "last_trigger": sensor_state.get("last_trigger"),
+                "last_trigger_metadata": sensor_state.get("last_trigger_metadata"),
+            },
+        }
 
     def _refresh_visual_status_sync(self, sensor_state: dict[str, Any], *, timeout_sec: float = 0.8) -> None:
         sensors = sensor_state.setdefault("sensors", {})
@@ -1198,6 +1234,20 @@ class MainServerService:
             except json.JSONDecodeError:
                 trigger_metadata = {}
             with self._mqtt_lock:
+                current_trigger = str(self._mqtt_sensor_state.get("last_trigger", "")).strip().upper()
+                current_meta = self._mqtt_sensor_state.get("last_trigger_metadata", {})
+                current_unix = 0.0
+                if isinstance(current_meta, dict):
+                    current_unix = float(current_meta.get("timestamp_unix", 0.0) or 0.0)
+                incoming_trigger = trigger_value.strip().upper()
+                if (
+                    current_trigger == "VISUAL"
+                    and incoming_trigger in {"", "REMOTE", "UNKNOWN"}
+                    and current_unix > 0
+                    and (now - current_unix) <= 10.0
+                ):
+                    return
+                trigger_metadata.setdefault("timestamp_unix", now)
                 self._mqtt_sensor_state["last_trigger"] = trigger_value
                 self._mqtt_sensor_state["last_trigger_metadata"] = trigger_metadata
                 self._mqtt_sensor_state["updated_unix"] = now
@@ -1297,6 +1347,19 @@ class MainServerService:
                     update = await self._set_sensor_enabled(sensor=sensor, enabled=enabled, source=source)
                 except Exception as exc:  # noqa: BLE001
                     update = {"ok": False, "error": str(exc)}
+                tool_result["update"] = update
+                if bool(update.get("ok")):
+                    tool_result["message"] = f"{sensor} sensor {'enabled' if enabled else 'disabled'}."
+                else:
+                    reason = str(
+                        update.get("error")
+                        or (update.get("mqtt") or {}).get("reason")
+                        or (update.get("mqtt") or {}).get("error")
+                        or "sensor command failed"
+                    )
+                    tool_result["message"] = (
+                        f"{sensor} sensor setting was saved locally, but the ESP update may not have been delivered ({reason})."
+                    )
                 actions.append(
                     {
                         "tool_name": name,
@@ -1314,17 +1377,52 @@ class MainServerService:
                 else:
                     cmd = "ARM" if name == "arm_system" else "DISARM"
 
+                desired_state = "armed" if cmd == "ARM" else "deactivated"
+                self._set_desired_alarm_state(desired_state)
                 tx = await self._mqtt_publish(topic=self.mqtt_command_topic, payload=cmd, source=source)
+                tool_result["state_applied_locally"] = True
+                tool_result["desired_alarm_state"] = desired_state
+                tool_result["mqtt"] = tx
+                if bool(tx.get("ok")):
+                    tool_result["message"] = (
+                        "System armed successfully." if cmd == "ARM" else "System disarmed successfully."
+                    )
+                else:
+                    reason = str(tx.get("reason") or tx.get("error") or "mqtt publish failed")
+                    tool_result["message"] = (
+                        f"System {desired_state} locally, but the ESP command was not delivered ({reason})."
+                    )
                 action = {
                     "tool_name": name,
                     "mqtt_command": cmd,
                     "mqtt": tx,
+                    "state_applied_locally": True,
                 }
                 actions.append(action)
 
         if actions:
             result["mqtt_actions"] = actions
+            result["assistant_text"] = self._assistant_action_summary(result=result, actions=actions)
         return actions
+
+    @staticmethod
+    def _assistant_action_summary(*, result: dict[str, Any], actions: list[dict[str, Any]]) -> str:
+        messages: list[str] = []
+        for item in result.get("tool_results", []):
+            if not isinstance(item, dict):
+                continue
+            tool_result = item.get("result")
+            if not isinstance(tool_result, dict):
+                continue
+            msg = str(tool_result.get("message", "")).strip()
+            if msg:
+                messages.append(msg)
+        if messages:
+            return " ".join(messages)
+        failed = [a for a in actions if not bool((a.get("mqtt") or {}).get("ok", False))]
+        if failed:
+            return "Action was applied locally, but one ESP/MQTT command failed."
+        return str(result.get("assistant_text", "")).strip() or "Done."
 
     @staticmethod
     def _safe_rel_parts(raw_path: str) -> list[str] | None:
@@ -1933,10 +2031,7 @@ class MainServerService:
         try:
             wav_bytes = await self._audio_io_segment_wav(segment_id)
             await self._voice_busy_start()
-            try:
-                result = await self._assistant_audio(wav_bytes, source=self.voice_loop_source)
-            finally:
-                await self._voice_busy_stop()
+            result = await self._assistant_audio(wav_bytes, source=self.voice_loop_source)
             mqtt_actions = await self._handle_assistant_tool_actions(result=result, source="assistant_voice")
 
             assistant_text = str(result.get("assistant_text", "")).strip()
@@ -1990,6 +2085,7 @@ class MainServerService:
             )
             await self._publish_log(f"voice loop failed for segment {segment_id}: {exc}", source="voice")
         finally:
+            await self._voice_busy_stop()
             self._voice_loop_processing = False
             await self._broadcast_voice_status()
 
@@ -2283,7 +2379,11 @@ class MainServerService:
             self._set_desired_alarm_state("alarm")
             with self._mqtt_lock:
                 self._mqtt_sensor_state["last_trigger"] = "REMOTE"
-                self._mqtt_sensor_state["last_trigger_metadata"] = {"sensor": "REMOTE", "source": payload["source"]}
+                self._mqtt_sensor_state["last_trigger_metadata"] = {
+                    "sensor": "REMOTE",
+                    "source": payload["source"],
+                    "timestamp_unix": dt.datetime.now().timestamp(),
+                }
             mqtt_result = await self._mqtt_publish(
                 topic=self.mqtt_command_topic,
                 payload="ALARM",
@@ -2444,6 +2544,7 @@ class MainServerService:
                     "sensor": "VISUAL",
                     "human_count": human_count,
                     "detections": parsed.get("detections", []),
+                    "timestamp_unix": dt.datetime.now().timestamp(),
                 }
             self._set_desired_alarm_state("alarm")
             await self._mqtt_publish(topic=self.mqtt_command_topic, payload="ALARM", source="visual_detection")
@@ -2733,7 +2834,7 @@ class MainServerService:
         app.router.add_get("/api/mqtt/status", self._handle_api_mqtt_status)
         app.router.add_get("/api/sensors/status", self._handle_api_sensors_status)
         app.router.add_post("/api/sensors/update", self._handle_api_sensor_update)
-        page_pattern = r"/{page:Home_page\.html|log\.html|chat\.html|video\.html|sensors\.html|about_us\.html}"
+        page_pattern = r"/{page:Home_page\.html|log\.html|chat\.html|video\.html|sensors\.html}"
         app.router.add_get(page_pattern, self._handle_page)
         app.router.add_get("/templates/{name}", self._handle_template_alias)
         app.router.add_get("/static/{path:.*}", self._handle_static)
@@ -2768,7 +2869,7 @@ class MainServerService:
             details={"host": self.host, "port": self.port, "video_source": self.video_source},
         )
         self.logger.info("service_id=%s listening on http://%s:%s", self.service_id, self.host, self.port)
-        self.logger.info("pages: /Home_page.html /log.html /chat.html /video.html /sensors.html /about_us.html")
+        self.logger.info("pages: /Home_page.html /log.html /chat.html /video.html /sensors.html")
         self.logger.info("websocket: /ws | api: /api/*")
         if self.mqtt_enabled:
             self.logger.info(

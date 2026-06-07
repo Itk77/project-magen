@@ -7,6 +7,10 @@ const sendButton = document.getElementById("send-btn");
 let history_loaded = false;
 let wait_response = false;
 
+function redactSensitiveText(text) {
+    return String(text || "").replace(/(\bpassword\b\s*(?:is|=|:)?\s*)([^\s,.;]+)/gi, "$1***");
+}
+
 socket.onopen = () => {
     console.log("Connected to the Raspberry Pi!");
     // Ask for history as soon as we connect
@@ -48,9 +52,19 @@ socket.onmessage = (event) => {
 // Helper function to add messages to the screen
 function appendMessage(sender, text) {
     const msgDiv = document.createElement("div");
-    // You can use these classes in your CSS for styling
     msgDiv.className = sender === "You" ? "user-message" : "bot-message";
-    msgDiv.innerHTML = `<b>${sender}:</b> ${text}`;
+
+    const senderEl = document.createElement("span");
+    senderEl.className = "message-sender";
+    senderEl.textContent = `${sender}:`;
+
+    const textEl = document.createElement("span");
+    textEl.className = "message-text";
+    textEl.dir = "auto";
+    textEl.textContent = redactSensitiveText(text);
+
+    msgDiv.appendChild(senderEl);
+    msgDiv.appendChild(textEl);
     chatBox.appendChild(msgDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
@@ -66,7 +80,10 @@ function handleMessage() {
 
     // Show your message and a loading indicator
     appendMessage("You", text);
-    chatBox.innerHTML += "<i id='typing' style='color: gray;'>Bot is thinking...</i>";
+    const typing = document.createElement("i");
+    typing.id = "typing";
+    typing.textContent = "Bot is thinking...";
+    chatBox.appendChild(typing);
     chatBox.scrollTop = chatBox.scrollHeight;
 
     // Lock the UI
